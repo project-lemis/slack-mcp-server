@@ -6,6 +6,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Build output
+dist/
 build/
 *.tsbuildinfo
 
@@ -80,6 +81,7 @@ jspm_packages/
 
 # Nuxt.js build / generate output
 .nuxt
+dist
 
 # Gatsby files
 .cache/
