@@ -18,7 +18,6 @@
     "dist"
   ],
   "scripts": {
-    "prepare": "./node_modules/.bin/tsc && chmod +x dist/*.js",
     "build": "tsc && shx chmod +x dist/*.js",
     "watch": "tsc --watch",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
