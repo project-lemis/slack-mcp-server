@@ -114,7 +114,8 @@ export class SlackClient {
       headers: this.botHeaders,
       body: JSON.stringify({
         channel: channel_id,
-        text: text,
+        text,
+        blocks: [{ type: "markdown", text }],
       }),
     });
 
@@ -132,7 +133,8 @@ export class SlackClient {
       body: JSON.stringify({
         channel: channel_id,
         thread_ts: thread_ts,
-        text: text,
+        text,
+        blocks: [{ type: "markdown", text }],
       }),
     });
 
