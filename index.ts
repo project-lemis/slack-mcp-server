@@ -207,6 +207,32 @@ export class SlackClient {
     return response.json();
   }
 
+  async getFileInfo(file_id: string): Promise<any> {
+    const response = await fetch(
+      `https://slack.com/api/files.info?file=${file_id}`,
+      { headers: this.botHeaders },
+    );
+    return response.json();
+  }
+
+  async downloadFile(url: string): Promise<{ content: string; mimeType: string }> {
+    const response = await fetch(url, {
+      headers: { Authorization: this.botHeaders.Authorization },
+    });
+    if (!response.ok) {
+      throw new Error(`File download failed: ${response.status} ${response.statusText}`);
+    }
+    const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+    const buffer = await response.arrayBuffer();
+
+    // For text-based files, return as text
+    if (contentType.startsWith("text/") || contentType.includes("json") || contentType.includes("xml") || contentType.includes("javascript") || contentType.includes("typescript")) {
+      return { content: new TextDecoder().decode(buffer), mimeType: contentType };
+    }
+    // For everything else, return base64
+    return { content: Buffer.from(buffer).toString("base64"), mimeType: contentType };
+  }
+
   async getUserProfile(user_id: string): Promise<any> {
     const params = new URLSearchParams({
       user: user_id,
@@ -370,6 +396,45 @@ export function createSlackServer(slackClient: SlackClient): McpServer {
       const response = await slackClient.getUserProfile(user_id);
       return {
         content: [{ type: "text", text: JSON.stringify(response) }],
+      };
+    }
+  );
+
+  server.registerTool(
+    "slack_get_file_info",
+    {
+      title: "Get Slack File Info",
+      description: "Get metadata about a file shared in Slack (name, type, size, download URL). Use the file ID from message attachments.",
+      inputSchema: {
+        file_id: z.string().describe("The Slack file ID (e.g., F0AMFBUL5QQ)"),
+      },
+    },
+    async ({ file_id }) => {
+      const response = await slackClient.getFileInfo(file_id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(response) }],
+      };
+    }
+  );
+
+  server.registerTool(
+    "slack_download_file",
+    {
+      title: "Download Slack File",
+      description: "Download a file from Slack using its private URL. Returns text content for text files, base64 for binary files (PDF, DOCX, images).",
+      inputSchema: {
+        url: z.string().describe("The url_private from file info (e.g., https://files.slack.com/files-pri/...)"),
+      },
+    },
+    async ({ url }) => {
+      const result = await slackClient.downloadFile(url);
+      if (result.mimeType.startsWith("text/") || result.mimeType.includes("json")) {
+        return {
+          content: [{ type: "text", text: result.content }],
+        };
+      }
+      return {
+        content: [{ type: "text", text: `[Binary file: ${result.mimeType}, ${Math.round(result.content.length * 3/4)} bytes]\nBase64:\n${result.content}` }],
       };
     }
   );
