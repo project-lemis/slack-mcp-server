@@ -7,6 +7,7 @@ import express from "express";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { writeFileSync, mkdirSync } from 'node:fs';
 
 // Type definitions for tool arguments
 interface ListChannelsArgs {
@@ -421,20 +422,26 @@ export function createSlackServer(slackClient: SlackClient): McpServer {
     "slack_download_file",
     {
       title: "Download Slack File",
-      description: "Download a file from Slack using its private URL. Returns text content for text files, base64 for binary files (PDF, DOCX, images).",
+      description: "Download a file from Slack and save it to /tmp/slack-files/. Returns the local file path so you can read it with your tools (Read tool for PDFs/images, or shell commands for DOCX/other formats).",
       inputSchema: {
         url: z.string().describe("The url_private from file info (e.g., https://files.slack.com/files-pri/...)"),
+        filename: z.string().describe("Filename to save as (e.g., 'architecture.docx', 'paper.pdf')"),
       },
     },
-    async ({ url }) => {
+    async ({ url, filename }) => {
       const result = await slackClient.downloadFile(url);
-      if (result.mimeType.startsWith("text/") || result.mimeType.includes("json")) {
-        return {
-          content: [{ type: "text", text: result.content }],
-        };
+      const dir = "/tmp/slack-files";
+      mkdirSync(dir, { recursive: true });
+      const filePath = `${dir}/${filename}`;
+
+      if (result.mimeType.startsWith("text/") || result.mimeType.includes("json") || result.mimeType.includes("xml")) {
+        writeFileSync(filePath, result.content, "utf-8");
+      } else {
+        writeFileSync(filePath, Buffer.from(result.content, "base64"));
       }
+
       return {
-        content: [{ type: "text", text: `[Binary file: ${result.mimeType}, ${Math.round(result.content.length * 3/4)} bytes]\nBase64:\n${result.content}` }],
+        content: [{ type: "text", text: `File saved to ${filePath} (${result.mimeType}). Use your Read tool for PDFs/images, or shell commands for other formats (e.g., 'pandoc ${filePath} -t plain' for DOCX).` }],
       };
     }
   );
