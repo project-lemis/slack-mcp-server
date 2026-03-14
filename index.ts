@@ -216,7 +216,7 @@ export class SlackClient {
     return response.json();
   }
 
-  async downloadFile(url: string): Promise<{ content: string; mimeType: string }> {
+  async downloadFile(url: string): Promise<{ buffer: Buffer; mimeType: string }> {
     const response = await fetch(url, {
       headers: { Authorization: this.botHeaders.Authorization },
     });
@@ -224,14 +224,8 @@ export class SlackClient {
       throw new Error(`File download failed: ${response.status} ${response.statusText}`);
     }
     const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-    const buffer = await response.arrayBuffer();
-
-    // For text-based files, return as text
-    if (contentType.startsWith("text/") || contentType.includes("json") || contentType.includes("xml") || contentType.includes("javascript") || contentType.includes("typescript")) {
-      return { content: new TextDecoder().decode(buffer), mimeType: contentType };
-    }
-    // For everything else, return base64
-    return { content: Buffer.from(buffer).toString("base64"), mimeType: contentType };
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return { buffer, mimeType: contentType };
   }
 
   async getUserProfile(user_id: string): Promise<any> {
@@ -433,15 +427,10 @@ export function createSlackServer(slackClient: SlackClient): McpServer {
       const dir = "/tmp/slack-files";
       mkdirSync(dir, { recursive: true });
       const filePath = `${dir}/${filename}`;
-
-      if (result.mimeType.startsWith("text/") || result.mimeType.includes("json") || result.mimeType.includes("xml")) {
-        writeFileSync(filePath, result.content, "utf-8");
-      } else {
-        writeFileSync(filePath, Buffer.from(result.content, "base64"));
-      }
+      writeFileSync(filePath, result.buffer);
 
       return {
-        content: [{ type: "text", text: `File saved to ${filePath} (${result.mimeType}). Use your Read tool for PDFs/images, or shell commands for other formats (e.g., 'pandoc ${filePath} -t plain' for DOCX).` }],
+        content: [{ type: "text", text: `File saved to ${filePath} (${result.mimeType}, ${result.buffer.length} bytes). Use your Read tool for PDFs/images, or shell commands for other formats (e.g., 'pandoc ${filePath} -t plain' for DOCX).` }],
       };
     }
   );
